@@ -1,0 +1,16 @@
+import { Router } from 'express';
+import { requireAuth } from '../middleware/auth.js';
+import { attachWorkspace, requireWorkspaceRole } from '../middleware/workspace.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
+import * as workspaces from '../controllers/workspaceController.js';
+const router = Router();
+router.use(requireAuth);
+router.get('/', asyncHandler(workspaces.listWorkspaces));
+router.post('/', asyncHandler(workspaces.createWorkspace));
+router.post('/invitations/accept', asyncHandler(workspaces.acceptInvitation));
+router.use(attachWorkspace);
+router.get('/members', asyncHandler(workspaces.listMembers));
+router.get('/invitations', requireWorkspaceRole('owner','admin'), asyncHandler(workspaces.listInvitations));
+router.post('/invitations', requireWorkspaceRole('owner','admin'), asyncHandler(workspaces.inviteMember));
+router.delete('/invitations/:id', requireWorkspaceRole('owner','admin'), asyncHandler(workspaces.revokeInvitation));
+export default router;
