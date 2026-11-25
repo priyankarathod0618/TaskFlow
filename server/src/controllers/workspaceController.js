@@ -4,7 +4,7 @@ import { Workspace } from '../models/Workspace.js';
 import { WorkspaceInvitation } from '../models/WorkspaceInvitation.js';
 import { User } from '../models/User.js';
 import { getUserWorkspaces } from '../services/workspaceService.js';
-
+import mongoose from 'mongoose';
 const createSchema = z.object({ name: z.string().trim().min(2).max(100) });
 const inviteSchema = z.object({ email: z.string().trim().email().max(254), role: z.enum(['admin','member','viewer']).default('member') });
 const hash = (value) => crypto.createHash('sha256').update(value).digest('hex');
@@ -54,4 +54,97 @@ export async function acceptInvitation(req, res) {
 export async function listMembers(req, res) {
   await req.workspace.populate('members.user', 'name email title avatarColor');
   res.json({ members: req.workspace.members.map(m => ({ user: m.user, role: m.role })) });
+}
+
+const updateMemberRoleSchema = z.object({
+  role: z.enum(['admin', 'member', 'viewer'])
+});
+
+export async function updateMemberRole(req, res) {
+  if (!mongoose.isValidObjectId(req.params.userId)) {
+    return res.status(400).json({ message: 'Invalid member ID.' });
+  }
+
+  const { role } = updateMemberRoleSchema.parse(req.body || {});
+  const targetId = String(req.params.userId);
+  const actorId = String(req.user._id);
+  const ownerId = String(req.workspace.owner);
+
+  if (targetId === ownerId) {
+    return res.status(403).json({ message: 'The workspace owner role cannot be changed.' });
+  }
+
+  if (targetId === actorId) {
+    return res.status(403).json({ message: 'You cannot change your own workspace role.' });
+  }
+
+  const target = req.workspace.members.find(
+    m => String(m.user?._id || m.user) === targetId
+  );
+
+  if (!target) {
+    return res.status(404).json({ message: 'Workspace member not found.' });
+  }
+
+  if (target.role === 'owner') {
+    return res.status(403).json({ message: 'The workspace owner role cannot be changed.' });
+  }
+
+  if (req.workspaceRole === 'admin') {
+    if (target.role === 'admin' || role === 'admin') {
+      return res.status(403).json({
+        message: 'Admins cannot change another admin or promote members to admin.'
+      });
+    }
+  }
+
+  target.role = role;
+  await req.workspace.save();
+
+  res.json({
+    message: 'Member role updated successfully.',
+    member: { userId: targetId, role: target.role }
+  });
+}
+
+export async function removeMember(req, res) {
+  if (!mongoose.isValidObjectId(req.params.userId)) {
+    return res.status(400).json({ message: 'Invalid member ID.' });
+  }
+
+  const targetId = String(req.params.userId);
+  const actorId = String(req.user._id);
+  const ownerId = String(req.workspace.owner);
+
+  if (targetId === ownerId) {
+    return res.status(403).json({ message: 'The workspace owner cannot be removed.' });
+  }
+
+  if (targetId === actorId) {
+    return res.status(403).json({ message: 'You cannot remove yourself from this workspace.' });
+  }
+
+  const target = req.workspace.members.find(
+    m => String(m.user?._id || m.user) === targetId
+  );
+
+  if (!target) {
+    return res.status(404).json({ message: 'Workspace member not found.' });
+  }
+
+  if (target.role === 'owner') {
+    return res.status(403).json({ message: 'The workspace owner cannot be removed.' });
+  }
+
+  if (req.workspaceRole === 'admin' && target.role === 'admin') {
+    return res.status(403).json({ message: 'Admins cannot remove another admin.' });
+  }
+
+  req.workspace.members = req.workspace.members.filter(
+    m => String(m.user?._id || m.user) !== targetId
+  );
+
+  await req.workspace.save();
+
+  res.json({ message: 'Member removed successfully.' });
 }

@@ -13,4 +13,15 @@ router.get('/members', asyncHandler(workspaces.listMembers));
 router.get('/invitations', requireWorkspaceRole('owner','admin'), asyncHandler(workspaces.listInvitations));
 router.post('/invitations', requireWorkspaceRole('owner','admin'), asyncHandler(workspaces.inviteMember));
 router.delete('/invitations/:id', requireWorkspaceRole('owner','admin'), asyncHandler(workspaces.revokeInvitation));
+router.patch(
+  '/members/:userId/role',
+  requireWorkspaceRole('owner', 'admin'),
+  asyncHandler(workspaces.updateMemberRole)
+);
+
+router.delete(
+  '/members/:userId',
+  requireWorkspaceRole('owner', 'admin'),
+  asyncHandler(workspaces.removeMember)
+);
 export default router;
