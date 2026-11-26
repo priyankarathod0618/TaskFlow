@@ -8,6 +8,7 @@ import ProjectsPage from './pages/workspace/ProjectsPage';
 import TasksPage from './pages/workspace/TasksPage';
 import ProjectDetailPage from './pages/workspace/ProjectDetailPage';
 import GenericPages from './pages/workspace/GenericPages';
+import CollaborationPage from './pages/workspace/CollaborationPage';
 import { TimeLogsPage, TimesheetsPage } from './pages/workspace/TimeTrackingPages';
 import Modal from './components/common/Modal';
 import TaskModal from './components/tasks/TaskModal';
@@ -31,6 +32,7 @@ function AppInner(){
  else if(page==='Overview')content=<DashboardPage setPage={setPage} onCreateProject={()=>setProjectModal(true)} onCreateTask={createTask}/>;
  else if(page==='Projects')content=<ProjectsPage onCreate={()=>setProjectModal(true)} onOpen={setProject}/>;
  else if(page==='Tasks')content=<TasksPage onCreate={createTask} onEdit={t=>{setTask(t);setTaskModal(true);}}/>;
+ else if(page==='Collaboration')content=<CollaborationPage/>;
  else if(page==='Time logs')content=<TimeLogsPage onCreate={()=>setResourceModal('Time logs')}/>;
  else if(page==='Timesheets')content=<TimesheetsPage/>;
  else if(page==='Approvals')content=<TimesheetsPage approvals/>;

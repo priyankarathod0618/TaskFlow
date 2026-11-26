@@ -1,3 +1,4 @@
+
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { attachWorkspace, requireWorkspaceRole } from '../middleware/workspace.js';
@@ -6,6 +7,7 @@ import * as projects from '../controllers/projectController.js';
 import * as tasks from '../controllers/taskController.js';
 import * as resources from '../controllers/resourceController.js';
 import * as timesheets from '../controllers/timesheetController.js';
+import * as collaboration from '../controllers/collaborationController.js';
 
 const router = Router();
 const managers = requireWorkspaceRole('owner', 'admin');
@@ -15,6 +17,11 @@ router.use(requireAuth, attachWorkspace);
 
 router.get('/dashboard', asyncHandler(resources.dashboard));
 router.get('/activity', asyncHandler(resources.listActivity));
+
+// Collaboration
+router.get('/collaboration/messages', asyncHandler(collaboration.listMessages));
+router.post('/collaboration/messages', contributors, asyncHandler(collaboration.createMessage));
+
 router.get('/analytics/workload', asyncHandler(resources.workloadAnalytics));
 
 router.get('/projects', asyncHandler(projects.listProjects));

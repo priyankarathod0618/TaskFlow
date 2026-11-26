@@ -11,6 +11,7 @@ export default function TaskModal({ onClose, onSave, task }) {
   const [comment, setComment] = useState('');
   const [comments, setComments] = useState(task?.comments || []);
   const [commentError, setCommentError] = useState('');
+  const [mentionQuery, setMentionQuery] = useState(null);
 
   const [form, setForm] = useState({
     title: task?.title || '',
@@ -60,6 +61,22 @@ export default function TaskModal({ onClose, onSave, task }) {
     });
   }
 
+  function changeComment(value) {
+    setComment(value);
+    const match = value.match(/(?:^|\s)@([^\s@]*)$/);
+    setMentionQuery(match ? match[1].toLowerCase() : null);
+  }
+
+  function insertCommentMention(member) {
+    setComment(value =>
+      value.replace(/(?:^|\s)@([^\s@]*)$/, match => {
+        const prefix = match.startsWith(' ') ? ' ' : '';
+        return `${prefix}@${member.email} `;
+      })
+    );
+    setMentionQuery(null);
+  }
+
   async function addComment(e) {
     e.preventDefault();
     setCommentError('');
@@ -72,6 +89,7 @@ export default function TaskModal({ onClose, onSave, task }) {
 
       setComments(d.task.comments || []);
       setComment('');
+      setMentionQuery(null);
     } catch (e) {
       setCommentError(e.message);
     }
@@ -283,16 +301,44 @@ export default function TaskModal({ onClose, onSave, task }) {
               Add a comment
               <textarea
                 value={comment}
-                onChange={e => setComment(e.target.value)}
+                onChange={e => changeComment(e.target.value)}
                 required
                 maxLength="5000"
               />
             </label>
 
+            {mentionQuery !== null && members
+              .filter(member =>
+                (member.name || '').toLowerCase().includes(mentionQuery) ||
+                (member.email || '').toLowerCase().includes(mentionQuery)
+              )
+              .slice(0, 6).length > 0 && (
+                <div className="mention-suggestions task-mention-suggestions">
+                  <span className="mention-suggestions-label">Mention a teammate</span>
+                  {members
+                    .filter(member =>
+                      (member.name || '').toLowerCase().includes(mentionQuery) ||
+                      (member.email || '').toLowerCase().includes(mentionQuery)
+                    )
+                    .slice(0, 6)
+                    .map(member => (
+                      <button
+                        type="button"
+                        key={member._id}
+                        onClick={() => insertCommentMention(member)}
+                      >
+                        <b>{member.name}</b>
+                        <small>{member.email}</small>
+                      </button>
+                    ))}
+                </div>
+              )}
+
             {commentError && (
               <p className="error-banner">{commentError}</p>
             )}
 
+            <small className="muted">Type @ and choose a teammate to notify them.</small>
             <button className="btn btn-secondary">
               Post comment
             </button>
