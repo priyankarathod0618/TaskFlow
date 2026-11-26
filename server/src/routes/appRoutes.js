@@ -25,6 +25,7 @@ router.post('/projects/:id/archive', managers, asyncHandler(projects.archiveProj
 router.get('/tasks', asyncHandler(tasks.listTasks));
 router.post('/tasks', contributors, asyncHandler(tasks.createTask));
 router.patch('/tasks/:id', contributors, asyncHandler(tasks.updateTask));
+router.delete('/tasks/:id', managers, asyncHandler(tasks.deleteTask));
 router.post('/tasks/:id/comments', contributors, asyncHandler(tasks.addComment));
 
 router.get('/issues', asyncHandler(resources.listIssues));

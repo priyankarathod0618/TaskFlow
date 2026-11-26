@@ -101,3 +101,12 @@
 .role-member{background:#e8f5f1;color:#26836f}
 .role-viewer{background:#fff3df;color:#a87525}
 @media(max-width:760px){.sidebar{height:100dvh}.side-scroll{padding-bottom:8px}.side-bottom{padding-bottom:max(10px,env(safe-area-inset-bottom))}.table-panel{padding:14px}.table-panel table{min-width:620px}}
+.blocked-task {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #d97706;
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 8px;
+}
