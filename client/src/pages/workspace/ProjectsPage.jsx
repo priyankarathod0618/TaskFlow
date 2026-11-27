@@ -1,10 +1,110 @@
-import {useEffect,useState} from 'react';
-import {Plus,Search,FolderKanban,MoreHorizontal,Archive} from 'lucide-react';
-import {api} from '../../services/api';import {percent,shortDate} from '../../utils/format';
-export default function ProjectsPage({onCreate,onOpen}){
- const [projects,setProjects]=useState([]),[query,setQuery]=useState(''),[error,setError]=useState('');
- async function load(){try{setProjects((await api('/projects')).projects);}catch(e){setError(e.message);}}useEffect(()=>{load();},[]);
- const filtered=projects.filter(p=>p.name.toLowerCase().includes(query.toLowerCase()));
- async function archive(id){if(!confirm('Archive this project?'))return;try{await api(`/projects/${id}/archive`,{method:'POST'});load();}catch(e){setError(e.message);}}
- return <><div className="page-heading"><div><p className="eyebrow">DELIVERY PORTFOLIO</p><h1>Projects</h1><p className="muted">Organize initiatives, track progress and keep delivery visible.</p></div><button className="btn btn-primary" onClick={onCreate}><Plus size={16}/> New project</button></div>{error&&<div className="error-banner">{error}</div>}<div className="toolbar"><div className="search-field"><Search size={17}/><input placeholder="Search projects…" value={query} onChange={e=>setQuery(e.target.value)}/></div><span className="muted">{filtered.length} active projects</span></div><div className="project-cards">{filtered.map(p=><article className="project-card" key={p._id}><div className="project-card-top"><span className="project-symbol large" style={{background:p.color||'#6574df'}}><FolderKanban/></span><button className="icon-btn" onClick={()=>archive(p._id)} title="Archive project"><Archive size={17}/></button></div><p className="eyebrow">{p.code||'PROJECT'} · {p.priority||'Medium'} PRIORITY</p><h3>{p.name}</h3><p className="project-description">{p.description||'A shared space for planning and delivering this initiative.'}</p><div className="project-card-progress"><div><span>Task completion</span><b>{percent(p.taskStats?.done||0,p.taskStats?.total||0)}%</b></div><div className="progress-track"><i style={{width:`${percent(p.taskStats?.done||0,p.taskStats?.total||0)}%`}}/></div></div><div className="project-card-foot"><span className={`status-pill ${p.status==='Active'?'green':''}`}>{p.status}</span><span className="muted">Due {shortDate(p.dueDate)}</span></div><button className="card-open" onClick={()=>onOpen(p)}>Open project <span>→</span></button></article>)}{!filtered.length&&<div className="panel empty-wide"><FolderKanban size={30}/><h3>No projects found</h3><p>Create your first project or adjust your search.</p><button className="btn btn-primary" onClick={onCreate}>Create project</button></div>}</div></>;
-}
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+
+import ProjectsPage from './ProjectsPage';
+import { api } from '../../services/api';
+
+vi.mock('../../services/api', () => ({
+  api: vi.fn()
+}));
+
+const sampleProjects = [
+  {
+    _id: 'project-1',
+    name: 'Website Redesign',
+    code: 'WEB',
+    description: 'Redesign the company website',
+    status: 'Active',
+    priority: 'High',
+    dueDate: '2026-12-20',
+    taskStats: { done: 5, total: 10 }
+  },
+  {
+    _id: 'project-2',
+    name: 'Mobile Application',
+    code: 'APP',
+    description: 'Build a mobile application',
+    status: 'Active',
+    priority: 'Medium',
+    dueDate: '2026-12-25',
+    taskStats: { done: 2, total: 8 }
+  }
+];
+
+describe('ProjectsPage', () => {
+  beforeEach(() => {
+    vi.mocked(api).mockReset();
+    vi.mocked(api).mockResolvedValue({
+      projects: sampleProjects
+    });
+  });
+
+  it('loads and displays projects', async () => {
+    render(<ProjectsPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+
+    expect(
+      await screen.findByRole('heading', { name: 'Website Redesign' })
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByRole('heading', { name: 'Mobile Application' })
+    ).toBeInTheDocument();
+
+    expect(screen.getByText('2 active projects')).toBeInTheDocument();
+  });
+
+  it('filters projects using the search input', async () => {
+    render(<ProjectsPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+
+    await screen.findByRole('heading', { name: 'Website Redesign' });
+
+    fireEvent.change(screen.getByPlaceholderText('Search projects…'), {
+      target: { value: 'Mobile' }
+    });
+
+    expect(
+      screen.getByRole('heading', { name: 'Mobile Application' })
+    ).toBeInTheDocument();
+
+    expect(
+      screen.queryByRole('heading', { name: 'Website Redesign' })
+    ).not.toBeInTheDocument();
+
+    expect(screen.getByText('1 active projects')).toBeInTheDocument();
+  });
+
+  it('displays an empty state when no projects exist', async () => {
+    vi.mocked(api).mockResolvedValueOnce({ projects: [] });
+
+    render(<ProjectsPage onCreate={vi.fn()} onOpen={vi.fn()} />);
+
+    expect(
+      await screen.findByRole('heading', { name: 'No projects found' })
+    ).toBeInTheDocument();
+  });
+
+  it('calls onCreate when the New project button is clicked', async () => {
+    const onCreate = vi.fn();
+
+    render(<ProjectsPage onCreate={onCreate} onOpen={vi.fn()} />);
+
+    await screen.findByRole('heading', { name: 'Website Redesign' });
+
+    fireEvent.click(screen.getByRole('button', { name: /New project/i }));
+
+    expect(onCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes the selected project to onOpen', async () => {
+    const onOpen = vi.fn();
+
+    render(<ProjectsPage onCreate={vi.fn()} onOpen={onOpen} />);
+
+    await screen.findByRole('heading', { name: 'Website Redesign' });
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Open project/i })[0]);
+
+    expect(onOpen).toHaveBeenCalledWith(sampleProjects[0]);
+  });
+});
