@@ -65,6 +65,8 @@ export default function WorkspaceLayout({
   );
   const [workspaceError, setWorkspaceError] = useState('');
 
+  const [unreadCount, setUnreadCount] = useState(0);
+
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchData, setSearchData] = useState([]);
@@ -88,11 +90,47 @@ export default function WorkspaceLayout({
     }
   }
 
+  async function refreshUnreadCount() {
+    try {
+      const data = await api('/notifications');
+
+      setUnreadCount(
+        Number.isFinite(data.unreadCount)
+          ? data.unreadCount
+          : (data.notifications || []).filter(
+              notification => !notification.readAt
+            ).length
+      );
+    } catch {
+      // Keep the previous count if notifications cannot be loaded.
+    }
+  }
+
   useEffect(() => {
     refreshWorkspaces().catch(e =>
       setWorkspaceError(e.message)
     );
   }, []);
+
+  useEffect(() => {
+    refreshUnreadCount();
+
+    const interval = window.setInterval(
+      refreshUnreadCount,
+      30000
+    );
+
+    const handleFocus = () => {
+      refreshUnreadCount();
+    };
+
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [active]);
 
   async function createWorkspace() {
     const name = window.prompt('Name your new workspace');
@@ -367,10 +405,44 @@ export default function WorkspaceLayout({
             </button>
 
             <button
-              className="icon-btn"
-              onClick={() => setPage('Notifications')}
+              className="icon-btn notification-bell"
+              onClick={() => {
+                setPage('Notifications');
+                refreshUnreadCount();
+              }}
+              aria-label={
+                unreadCount > 0
+                  ? `${unreadCount} unread notifications`
+                  : 'Notifications'
+              }
+              title="Notifications"
+              style={{ position: 'relative' }}
             >
               <Bell size={18} />
+
+              {unreadCount > 0 && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: -5,
+                    right: -5,
+                    minWidth: 17,
+                    height: 17,
+                    padding: '0 4px',
+                    borderRadius: 20,
+                    background: '#dc3545',
+                    color: '#fff',
+                    fontSize: 10,
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    lineHeight: 1
+                  }}
+                >
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
             </button>
 
             <button className="help-btn">

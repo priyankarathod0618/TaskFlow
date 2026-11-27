@@ -36,6 +36,8 @@ export default function GenericPages({ page, onCreate }) {
   const [inviteRole, setInviteRole] = useState('member');
   const [inviteToken, setInviteToken] = useState('');
   const [teamMessage, setTeamMessage] = useState('');
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [markingAllRead, setMarkingAllRead] = useState(false);
 
   async function loadTeam() {
     const [membersData, invitationsData] = await Promise.all([
@@ -75,6 +77,15 @@ export default function GenericPages({ page, onCreate }) {
             d.notifications || d.activity || [];
 
           setItems(records);
+
+          if (page === 'Notifications') {
+            setUnreadCount(
+              Number.isFinite(d.unreadCount)
+                ? d.unreadCount
+                : records.filter(item => !item.readAt).length
+            );
+          }
+
           if (d.stats) setStats(d);
         })
         .catch(e => setError(e.message));
@@ -135,6 +146,7 @@ export default function GenericPages({ page, onCreate }) {
     }
 
     setError('');
+
     try {
       await api(`/workspaces/members/${userId}`, {
         method: 'DELETE'
@@ -185,8 +197,34 @@ export default function GenericPages({ page, onCreate }) {
       setItems(v => v.map(x =>
         x._id === id ? d.notification : x
       ));
+
+      setUnreadCount(count => Math.max(0, count - 1));
     } catch (e) {
       setError(e.message);
+    }
+  }
+
+  async function markAllRead() {
+    if (!unreadCount || markingAllRead) return;
+
+    setError('');
+    setMarkingAllRead(true);
+
+    try {
+      await api('/notifications/read-all', {
+        method: 'PATCH'
+      });
+
+      setItems(v => v.map(item => ({
+        ...item,
+        readAt: item.readAt || new Date().toISOString()
+      })));
+
+      setUnreadCount(0);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setMarkingAllRead(false);
     }
   }
 
@@ -207,7 +245,23 @@ export default function GenericPages({ page, onCreate }) {
           <p className="eyebrow">{c.eyebrow}</p>
           <h1>{c.title}</h1>
           <p className="muted">{c.desc}</p>
+
+          {page === 'Notifications' && (
+            <p className="muted">
+              {unreadCount} unread notification{unreadCount === 1 ? '' : 's'}
+            </p>
+          )}
         </div>
+
+        {page === 'Notifications' && (
+          <button
+            className="btn btn-ghost"
+            onClick={markAllRead}
+            disabled={!unreadCount || markingAllRead}
+          >
+            {markingAllRead ? 'Marking...' : 'Mark all as read'}
+          </button>
+        )}
 
         {['Issues', 'Milestones', 'Time logs'].includes(page) && (
           <button className="btn btn-primary" onClick={onCreate}>

@@ -1,16 +1,23 @@
 
 import crypto from 'node:crypto';
 import { z } from 'zod';
+import mongoose from 'mongoose';
+
 import { Workspace } from '../models/Workspace.js';
 import { WorkspaceInvitation } from '../models/WorkspaceInvitation.js';
 import { User } from '../models/User.js';
 import { getUserWorkspaces } from '../services/workspaceService.js';
-import mongoose from 'mongoose';
+
 import {
   canInviteWorkspaceRole,
   canManageWorkspaceMemberRole,
   canRemoveWorkspaceMember
 } from '../utils/workspacePermissions.js';
+
+import {
+  createNotifications,
+  notifyWorkspaceManagers
+} from '../services/notificationService.js';
 
 const createSchema = z.object({
   name: z.string().trim().min(2).max(100)
@@ -107,6 +114,13 @@ export async function inviteMember(req, res) {
     expiresAt: new Date(Date.now() + 7 * 86400000)
   });
 
+  await createNotifications({
+    userIds: [member._id],
+    workspaceId: req.workspace._id,
+    message: `You have been invited to join ${req.workspace.name} as a ${input.role}.`,
+    link: '/workspaces'
+  });
+
   res.status(201).json({
     invitation: {
       id: invitation._id,
@@ -197,6 +211,13 @@ export async function acceptInvitation(req, res) {
     invitation.save()
   ]);
 
+  await notifyWorkspaceManagers({
+    workspace,
+    actorId: req.user._id,
+    message: `${req.user.name || req.user.email} joined the workspace.`,
+    link: '/members'
+  });
+
   res.json({
     message: 'Invitation accepted.',
     workspace: {
@@ -270,6 +291,14 @@ export async function updateMemberRole(req, res) {
   target.role = role;
   await req.workspace.save();
 
+  await createNotifications({
+    userIds: [target.user?._id || target.user],
+    workspaceId: req.workspace._id,
+    message: `Your workspace role has been changed to ${role}.`,
+    link: '/members',
+    excludeUserIds: [req.user._id]
+  });
+
   res.json({
     message: 'Member role updated successfully.',
     member: { userId: targetId, role: target.role }
@@ -322,6 +351,13 @@ export async function removeMember(req, res) {
   );
 
   await req.workspace.save();
+
+  await notifyWorkspaceManagers({
+    workspace: req.workspace,
+    actorId: req.user._id,
+    message: `A member was removed from ${req.workspace.name}.`,
+    link: '/members'
+  });
 
   res.json({ message: 'Member removed successfully.' });
 }

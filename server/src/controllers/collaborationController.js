@@ -1,8 +1,8 @@
 
 import { WorkspaceMessage } from '../models/WorkspaceMessage.js';
-import { Notification } from '../models/Notification.js';
 import { User } from '../models/User.js';
 import { requireText } from '../utils/validation.js';
+import { createNotifications } from '../services/notificationService.js';
 
 const mentionPattern = /@([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})/gi;
 
@@ -22,7 +22,9 @@ export async function listMessages(req, res) {
     .sort({ createdAt: -1 })
     .limit(100);
 
-  res.json({ messages: messages.reverse() });
+  res.json({
+    messages: messages.reverse()
+  });
 }
 
 export async function createMessage(req, res) {
@@ -32,7 +34,10 @@ export async function createMessage(req, res) {
   });
 
   const emails = extractMentionEmails(body);
-  const memberIds = req.workspace.members.map(member => member.user);
+
+  const memberIds = req.workspace.members.map(
+    member => member.user
+  );
 
   const mentionedUsers = emails.length
     ? await User.find({
@@ -49,17 +54,18 @@ export async function createMessage(req, res) {
   });
 
   const recipients = mentionedUsers
-    .filter(user => String(user._id) !== String(req.user._id));
+    .filter(user =>
+      String(user._id) !== String(req.user._id)
+    );
 
   if (recipients.length) {
-    await Notification.insertMany(
-      recipients.map(user => ({
-        user: user._id,
-        workspace: req.workspace._id,
-        message: `${req.user.name || 'A teammate'} mentioned you in workspace chat.`,
-        link: '/collaboration'
-      }))
-    );
+    await createNotifications({
+      userIds: recipients.map(user => user._id),
+      workspaceId: req.workspace._id,
+      message: `${req.user.name || 'A teammate'} mentioned you in workspace chat.`,
+      link: '/collaboration',
+      excludeUserIds: [req.user._id]
+    });
   }
 
   const populatedMessage = await WorkspaceMessage.findOne({
@@ -69,5 +75,7 @@ export async function createMessage(req, res) {
     .populate('author', 'name email')
     .populate('mentions', 'name email');
 
-  res.status(201).json({ message: populatedMessage });
+  res.status(201).json({
+    message: populatedMessage
+  });
 }

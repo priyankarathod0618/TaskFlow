@@ -1,8 +1,8 @@
 
 import { Task } from '../models/Task.js';
 import { Project } from '../models/Project.js';
-import { Notification } from '../models/Notification.js';
 import { User } from '../models/User.js';
+import { createNotifications } from '../services/notificationService.js';
 import { canEditWorkspaceRecord } from '../utils/workspacePermissions.js';
 
 import {
@@ -54,12 +54,15 @@ async function notifyTaskParticipants({
     ...String(body).matchAll(
       /@([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})/gi
     )
-  ].map((m) => m[1].toLowerCase());
+  ].map((match) => match[1].toLowerCase());
 
   if (mentions.length) {
+    const workspaceMemberIds = (workspace.members || [])
+      .map((member) => member.user);
+
     const mentionedUsers = await User.find({
       email: { $in: mentions },
-      _id: { $in: workspace.members.map((m) => m.user) }
+      _id: { $in: workspaceMemberIds }
     }).select('_id');
 
     for (const user of mentionedUsers) {
@@ -69,16 +72,34 @@ async function notifyTaskParticipants({
     }
   }
 
-  if (recipients.size) {
-    await Notification.insertMany(
-      [...recipients].map((user) => ({
-        user,
-        workspace: workspace._id,
-        message,
-        link: '/tasks'
-      }))
-    );
+  if (!recipients.size) return [];
+
+  return createNotifications({
+    userIds: [...recipients],
+    workspaceId: workspace._id,
+    message,
+    link: '/tasks',
+    excludeUserIds: [actorId]
+  });
+}
+
+async function notifyTaskAssignee({
+  assigneeId,
+  workspaceId,
+  actorId,
+  message
+}) {
+  if (!assigneeId || String(assigneeId) === String(actorId)) {
+    return [];
   }
+
+  return createNotifications({
+    userIds: [assigneeId],
+    workspaceId,
+    message,
+    link: '/tasks',
+    excludeUserIds: [actorId]
+  });
 }
 
 async function validateMember(workspace, userId, field = 'Assignee') {
@@ -93,7 +114,6 @@ async function validateMember(workspace, userId, field = 'Assignee') {
   return userId;
 }
 
-// Validate status and priority values.
 function validateTaskWorkflow({ status, priority }) {
   if (
     status !== undefined &&
@@ -114,7 +134,6 @@ function validateTaskWorkflow({ status, priority }) {
   }
 }
 
-// Validate start and due dates.
 function validateTaskDates({ startDate, dueDate }) {
   function parseDate(value, field) {
     if (value === undefined || value === null || value === '') {
@@ -127,7 +146,6 @@ function validateTaskDates({ startDate, dueDate }) {
       throw badRequest(`${field} must be a valid date.`);
     }
 
-    // Reject impossible calendar dates such as 2026-02-31.
     if (
       typeof value === 'string' &&
       /^\d{4}-\d{2}-\d{2}$/.test(value)
@@ -455,14 +473,12 @@ export async function createTask(req, res) {
     ]
   });
 
-  if (task.assignee) {
-    await Notification.create({
-      user: task.assignee,
-      workspace: req.workspace._id,
-      message: `You were assigned: ${task.title}`,
-      link: '/tasks'
-    });
-  }
+  await notifyTaskAssignee({
+    assigneeId: task.assignee,
+    workspaceId: req.workspace._id,
+    actorId: req.user._id,
+    message: `You were assigned: ${task.title}`
+  });
 
   res.status(201).json({
     task: await populate(Task.findById(task._id))
@@ -630,6 +646,8 @@ export async function updateTask(req, res) {
     ? String(task.assignee)
     : null;
 
+  const previousStatus = task.status;
+
   for (const [key, value] of Object.entries(patch)) {
     if (key === 'status' && value !== task.status) {
       task.activity.push({
@@ -644,7 +662,10 @@ export async function updateTask(req, res) {
 
   await task.save();
 
-  if (patch.status !== undefined) {
+  if (
+    patch.status !== undefined &&
+    patch.status !== previousStatus
+  ) {
     await notifyTaskParticipants({
       task,
       workspace: req.workspace,
@@ -657,11 +678,11 @@ export async function updateTask(req, res) {
     task.assignee &&
     String(task.assignee) !== previousAssignee
   ) {
-    await Notification.create({
-      user: task.assignee,
-      workspace: req.workspace._id,
-      message: `You were assigned: ${task.title}`,
-      link: '/tasks'
+    await notifyTaskAssignee({
+      assigneeId: task.assignee,
+      workspaceId: req.workspace._id,
+      actorId: req.user._id,
+      message: `You were assigned: ${task.title}`
     });
   }
 
