@@ -1,7 +1,9 @@
+
 import mongoose from 'mongoose';
 import { TimeEntry } from '../models/TimeEntry.js';
 import { Timesheet } from '../models/Timesheet.js';
 import { Notification } from '../models/Notification.js';
+import { isWorkspaceManager, WORKSPACE_ROLE_GROUPS, hasWorkspaceRole } from '../utils/workspacePermissions.js';
 
 function weekBounds(value) {
   const date = value ? new Date(value) : new Date();
@@ -22,7 +24,7 @@ function weekBounds(value) {
 
 export async function listTimesheets(req, res) {
   const filter = { workspace: req.workspace._id };
-  if (!['owner', 'admin'].includes(req.workspaceRole)) filter.user = req.user._id;
+  if (!isWorkspaceManager(req.workspaceRole)) filter.user = req.user._id;
   if (req.query.status) {
     if (!['Draft', 'Submitted', 'Approved', 'Rejected'].includes(req.query.status)) {
       return res.status(400).json({ message: 'Invalid timesheet status.' });
@@ -39,6 +41,10 @@ export async function listTimesheets(req, res) {
 }
 
 export async function submitTimesheet(req, res) {
+  if (!hasWorkspaceRole(req.workspaceRole, WORKSPACE_ROLE_GROUPS.contributors)) {
+    return res.status(403).json({ message: 'Viewers cannot submit timesheets.' });
+  }
+
   const { start, end } = weekBounds(req.body?.weekStart);
   const entries = await TimeEntry.find({
     workspace: req.workspace._id,
@@ -101,7 +107,7 @@ export async function submitTimesheet(req, res) {
 }
 
 export async function reviewTimesheet(req, res) {
-  if (!['owner', 'admin'].includes(req.workspaceRole)) {
+  if (!isWorkspaceManager(req.workspaceRole)) {
     return res.status(403).json({ message: 'Only workspace owners and admins can review timesheets.' });
   }
   if (!mongoose.isValidObjectId(req.params.id)) {

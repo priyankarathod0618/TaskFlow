@@ -2,6 +2,7 @@
 import mongoose from 'mongoose';
 import { Workspace } from '../models/Workspace.js';
 import { ensureWorkspace } from '../services/workspaceService.js';
+import { hasWorkspaceRole } from '../utils/workspacePermissions.js';
 
 export async function attachWorkspace(req, res, next) {
   try {
@@ -50,8 +51,18 @@ export async function attachWorkspace(req, res, next) {
       });
     }
 
+    const isWorkspaceOwner =
+      String(workspace.owner) === String(req.user._id);
+
+    if (member.role === 'owner' && !isWorkspaceOwner) {
+      return res.status(403).json({
+        message: 'Workspace owner membership is inconsistent. Contact the workspace owner.'
+      });
+    }
+
     req.workspace = workspace;
-    req.workspaceRole = member.role;
+    // The workspace owner field is the source of truth for ownership.
+    req.workspaceRole = isWorkspaceOwner ? 'owner' : member.role;
 
     return next();
   } catch (error) {
@@ -61,7 +72,7 @@ export async function attachWorkspace(req, res, next) {
 
 export function requireWorkspaceRole(...roles) {
   return (req, res, next) => {
-    if (!roles.includes(req.workspaceRole)) {
+    if (!hasWorkspaceRole(req.workspaceRole, roles)) {
       return res.status(403).json({
         message: 'You do not have permission to perform this action.'
       });

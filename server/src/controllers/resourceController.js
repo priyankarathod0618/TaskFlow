@@ -1,3 +1,4 @@
+
 import { Issue } from '../models/Issue.js';
 import { Milestone } from '../models/Milestone.js';
 import { TimeEntry } from '../models/TimeEntry.js';
@@ -7,6 +8,7 @@ import { Project } from '../models/Project.js';
 import { Task } from '../models/Task.js';
 import { Timesheet } from '../models/Timesheet.js';
 import { getWorkspaceMember, isObjectId, requireText } from '../utils/validation.js';
+import { canEditWorkspaceRecord, isWorkspaceManager } from '../utils/workspacePermissions.js';
 
 function validateAssignee(workspace, value) {
   if (value === null || value === '') return null;
@@ -49,10 +51,17 @@ export async function updateIssue(req, res) {
   if (Object.hasOwn(patch, 'description') && typeof patch.description !== 'string') return res.status(400).json({ message: 'Description must be text.' });
   if (Object.hasOwn(patch, 'description')) patch.description = patch.description.slice(0, 10000);
   if (Object.hasOwn(patch, 'assignee')) patch.assignee = validateAssignee(req.workspace, patch.assignee);
-  if (req.workspaceRole === 'member') {
-    const existing = await Issue.findOne({ _id: req.params.id, workspace: req.workspace._id }).select('reporter assignee');
-    if (!existing) return res.status(404).json({ message: 'Issue not found.' });
-    if (String(existing.reporter || '') !== String(req.user._id) && String(existing.assignee || '') !== String(req.user._id)) return res.status(403).json({ message: 'Members can update issues they reported or are assigned to.' });
+  const existing = await Issue.findOne({
+    _id: req.params.id,
+    workspace: req.workspace._id
+  }).select('reporter assignee');
+
+  if (!existing) return res.status(404).json({ message: 'Issue not found.' });
+
+  if (!canEditWorkspaceRecord(req.workspaceRole, req.user._id, existing)) {
+    return res.status(403).json({
+      message: 'You can update issues only when you are a workspace manager, the issue reporter, or its assignee.'
+    });
   }
 
   const issue = await Issue.findOneAndUpdate(
@@ -122,7 +131,7 @@ export async function listTime(req, res) {
       return res.status(400).json({ message: 'The from date must be on or before the to date.' });
     }
   }
-  if (!['owner', 'admin'].includes(req.workspaceRole)) filter.user = req.user._id;
+  if (!isWorkspaceManager(req.workspaceRole)) filter.user = req.user._id;
   const entries = await TimeEntry.find(filter)
     .populate('project', 'name code').populate('task', 'title').populate('user', 'name')
     .sort({ date: -1 }).limit(500);

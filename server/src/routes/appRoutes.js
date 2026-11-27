@@ -9,10 +9,11 @@ import * as resources from '../controllers/resourceController.js';
 import * as timesheets from '../controllers/timesheetController.js';
 import * as collaboration from '../controllers/collaborationController.js';
 import * as reports from '../controllers/reportsController.js';
+import { WORKSPACE_ROLE_GROUPS } from '../utils/workspacePermissions.js';
 
 const router = Router();
-const managers = requireWorkspaceRole('owner', 'admin');
-const contributors = requireWorkspaceRole('owner', 'admin', 'member');
+const managers = requireWorkspaceRole(...WORKSPACE_ROLE_GROUPS.managers);
+const contributors = requireWorkspaceRole(...WORKSPACE_ROLE_GROUPS.contributors);
 
 router.use(requireAuth, attachWorkspace);
 

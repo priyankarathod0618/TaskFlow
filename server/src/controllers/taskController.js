@@ -3,6 +3,7 @@ import { Task } from '../models/Task.js';
 import { Project } from '../models/Project.js';
 import { Notification } from '../models/Notification.js';
 import { User } from '../models/User.js';
+import { canEditWorkspaceRecord } from '../utils/workspacePermissions.js';
 
 import {
   getWorkspaceMember,
@@ -378,13 +379,11 @@ export async function createTask(req, res) {
     )
   );
 
-  // Validate status and priority.
   validateTaskWorkflow({
     status: data.status,
     priority: data.priority
   });
 
-  // Validate dates before creating the task.
   validateTaskDates({
     startDate: data.startDate,
     dueDate: data.dueDate
@@ -482,13 +481,9 @@ export async function updateTask(req, res) {
     });
   }
 
-  if (
-    req.workspaceRole === 'member' &&
-    String(task.assignee || '') !== String(req.user._id) &&
-    String(task.reporter || '') !== String(req.user._id)
-  ) {
+  if (!canEditWorkspaceRecord(req.workspaceRole, req.user._id, task)) {
     return res.status(403).json({
-      message: 'Members can edit tasks assigned to them or created by them. Ask a workspace admin for broader access.'
+      message: 'You can edit tasks only when you are a workspace manager, the task reporter, or its assignee.'
     });
   }
 
@@ -518,13 +513,11 @@ export async function updateTask(req, res) {
     });
   }
 
-  // Validate status and priority.
   validateTaskWorkflow({
     status: patch.status,
     priority: patch.priority
   });
 
-  // Validate the final combination of start and due dates.
   validateTaskDates({
     startDate: Object.hasOwn(patch, 'startDate')
       ? patch.startDate
@@ -609,33 +602,29 @@ export async function updateTask(req, res) {
     }
   }
 
-  // Prevent completing a task while its dependencies are incomplete.
-  // Use updated dependencies when provided,
-// otherwise use the task's existing dependencies.
-const effectiveDependencies = Object.hasOwn(patch, 'dependencies')
-  ? patch.dependencies
-  : task.dependencies;
+  const effectiveDependencies = Object.hasOwn(patch, 'dependencies')
+    ? patch.dependencies
+    : task.dependencies;
 
-// Prevent completing a task while its dependencies are incomplete.
-if (
-  patch.status === 'Done' &&
-  effectiveDependencies?.length
-) {
-  const incompleteDependencies = await Task.find({
-    _id: { $in: effectiveDependencies },
-    workspace: req.workspace._id,
-    project: task.project,
-    status: { $ne: 'Done' }
-  }).select('title status');
+  if (
+    patch.status === 'Done' &&
+    effectiveDependencies?.length
+  ) {
+    const incompleteDependencies = await Task.find({
+      _id: { $in: effectiveDependencies },
+      workspace: req.workspace._id,
+      project: task.project,
+      status: { $ne: 'Done' }
+    }).select('title status');
 
-  if (incompleteDependencies.length) {
-    return res.status(400).json({
-      message: `Cannot complete this task until its dependencies are done: ${incompleteDependencies
-        .map(dep => dep.title)
-        .join(', ')}.`
-    });
+    if (incompleteDependencies.length) {
+      return res.status(400).json({
+        message: `Cannot complete this task until its dependencies are done: ${incompleteDependencies
+          .map(dep => dep.title)
+          .join(', ')}.`
+      });
+    }
   }
-}
 
   const previousAssignee = task.assignee
     ? String(task.assignee)
@@ -742,8 +731,6 @@ export async function deleteTask(req, res) {
     });
   }
 
-  // Prevent deletion if other tasks depend on this task
-  // or use it as their parent.
   const relatedTasks = await Task.find({
     workspace: req.workspace._id,
     _id: { $ne: task._id },
