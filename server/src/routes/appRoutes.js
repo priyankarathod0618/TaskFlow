@@ -8,6 +8,7 @@ import * as tasks from '../controllers/taskController.js';
 import * as resources from '../controllers/resourceController.js';
 import * as timesheets from '../controllers/timesheetController.js';
 import * as collaboration from '../controllers/collaborationController.js';
+import * as reports from '../controllers/reportsController.js';
 
 const router = Router();
 const managers = requireWorkspaceRole('owner', 'admin');
@@ -21,6 +22,9 @@ router.get('/activity', asyncHandler(resources.listActivity));
 // Collaboration
 router.get('/collaboration/messages', asyncHandler(collaboration.listMessages));
 router.post('/collaboration/messages', contributors, asyncHandler(collaboration.createMessage));
+
+// Reports
+router.get('/reports', asyncHandler(reports.reports));
 
 router.get('/analytics/workload', asyncHandler(resources.workloadAnalytics));
 
